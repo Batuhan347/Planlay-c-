@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Haftalık Planlayıcı</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<style>
+  :root { box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  html, body { min-height: 100%; background: #14151a; color: #e6e7ec; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; }
+  .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0; }
+  @media (max-width: 1023px) { .week { grid-template-columns: repeat(7, minmax(11rem, 1fr)); overflow-x: auto; padding-bottom: 5rem; } }
+  .col { border-left: 1px solid #2a2d38; transition: background .2s; }
+  .col:first-child { border-left: 0; }
+  .col-head { border-bottom: 1px solid #2a2d38; }
+  .col.today .col-head { border-bottom: 2px solid #7c8cf8; }
+  .col.drag-over { background: rgba(124,140,248,.08); }
+  .card[draggable=true] { cursor: grab; }
+  .card.dragging { opacity: .25; transform: scale(.97); }
+  .card { transition: opacity .4s ease, transform .2s ease, box-shadow .2s ease; }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,0,0,.4); }
+  .card.done { opacity: .45; }
+  .title { position: relative; transition: color .3s; background-image: linear-gradient(currentColor, currentColor); background-repeat: no-repeat; background-position: 0 55%; background-size: 0% 2px; transition: background-size .35s ease; }
+  .card.done .title { background-size: 100% 2px; }
+  .chk { border: 2px solid rgba(0,0,0,.45); transition: background .25s, transform .15s; }
+  .chk:hover { transform: scale(1.12); }
+  .chk svg { opacity: 0; transform: scale(.4); transition: all .25s ease; }
+  .card.done .chk { background: rgba(0,0,0,.75); }
+  .card.done .chk svg { opacity: 1; transform: scale(1); }
+  .swatch { transition: transform .15s, box-shadow .15s; }
+  .swatch:hover { transform: scale(1.15); }
+  input:checked + .swatch { box-shadow: 0 0 0 3px #14151a, 0 0 0 5px #fff; }
+  #modal { transition: opacity .2s ease; }
+  #modal.hidden-m { opacity: 0; pointer-events: none; }
+  #modal .panel { transition: transform .2s ease; }
+  #modal.hidden-m .panel { transform: scale(.95) translateY(8px); }
+  .fab { bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px)); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main class="max-w-[1600px] mx-auto p-4 sm:p-6">
+  <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-semibold tracking-tight">Haftalık Planlayıcı</h1>
+    <div class="flex flex-wrap items-center gap-2">
+      <p id="summary" class="text-sm text-zinc-400 mr-2"></p>
+      <button id="reset-done" class="px-3 py-1.5 text-sm rounded-lg border border-zinc-700 text-zinc-300 transition hover:bg-zinc-700/50 active:scale-95">Tamamlananları geri al</button>
+      <button id="clear-all" class="px-3 py-1.5 text-sm rounded-lg border border-zinc-700 text-zinc-300 transition hover:border-rose-500 hover:text-rose-300 active:scale-95">Haftayı temizle</button>
+    </div>
+  </header>
+  <section id="week" class="week"></section>
+</main>
+
+<button id="fab" aria-label="Görev ekle" class="fab fixed left-6 z-30 w-14 h-14 rounded-full bg-indigo-500 text-white shadow-xl shadow-indigo-900/50 flex items-center justify-center transition duration-200 hover:bg-indigo-400 hover:scale-110 hover:rotate-90 active:scale-95 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50">
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+</button>
+
+<div id="modal" class="hidden-m fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+  <form id="form" class="panel w-full max-w-md rounded-2xl bg-[#1d1f27] border border-zinc-700 p-6 shadow-2xl space-y-4">
+    <h2 id="m-title" class="text-lg font-semibold">Yeni görev</h2>
+    <div>
+      <label class="block text-sm text-zinc-400 mb-1" for="f-name">Görev adı</label>
+      <input id="f-name" required maxlength="60" class="w-full rounded-lg bg-[#14151a] border border-zinc-700 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/30" placeholder="Örn. Spor salonu">
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-sm text-zinc-400 mb-1" for="f-start">Başlangıç saati</label>
+        <input id="f-start" type="time" required value="09:00" class="w-full rounded-lg bg-[#14151a] border border-zinc-700 px-3 py-2 outline-none transition focus:border-indigo-400 [color-scheme:dark]">
+      </div>
+      <div>
+        <label class="block text-sm text-zinc-400 mb-1" for="f-end">Bitiş saati</label>
+        <input id="f-end" type="time" required value="10:00" class="w-full rounded-lg bg-[#14151a] border border-zinc-700 px-3 py-2 outline-none transition focus:border-indigo-400 [color-scheme:dark]">
+      </div>
+    </div>
+    <p id="err" class="hidden text-sm text-rose-400">Bitiş saati başlangıçtan sonra olmalı.</p>
+    <div>
+      <label class="block text-sm text-zinc-400 mb-1" for="f-day">Gün</label>
+      <select id="f-day" class="w-full rounded-lg bg-[#14151a] border border-zinc-700 px-3 py-2 outline-none transition focus:border-indigo-400"></select>
+    </div>
+    <fieldset>
+      <legend class="block text-sm text-zinc-400 mb-2">Renk</legend>
+      <div id="colors" class="flex gap-3"></div>
+    </fieldset>
+    <div class="flex justify-end gap-2 pt-2">
+      <button type="button" id="cancel" class="px-4 py-2 rounded-lg text-zinc-300 transition hover:bg-zinc-700/60">Vazgeç</button>
+      <button type="submit" id="m-submit" class="px-4 py-2 rounded-lg bg-indigo-500 font-medium text-white transition hover:bg-indigo-400 active:scale-95">Görevi ekle</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  var DAYS = ["Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi","Pazar"];
+  var COLORS = [
+    { name: "Pastel mavi", bg: "#bcd9ff" }, { name: "Mint yeşili", bg: "#bff0d4" },
+    { name: "Uçuk sarı", bg: "#fbf0a8" }, { name: "Lila", bg: "#dccbfb" },
+    { name: "Şeftali", bg: "#ffd3b8" }, { name: "Pembe", bg: "#fbc9dc" }
+  ];
+  var KEY = "weekly-planner-tasks-v1";
+  var tasks = load();
+
+  function load() {
+    try { var r = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(r) ? r : []; }
+    catch (e) { return []; }
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(tasks)); } catch (e) {} }
+  function esc(s) { return s.replace(/[&<>"']/g, function (c) { return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); }
+
+  var weekEl = document.getElementById("week");
+  var modal = document.getElementById("modal");
+  var form = document.getElementById("form");
+
+  // Form options
+  document.getElementById("f-day").innerHTML = DAYS.map(function (d, i) { return '<option value="' + i + '">' + d + '</option>'; }).join("");
+  document.getElementById("colors").innerHTML = COLORS.map(function (c, i) {
+    return '<label class="cursor-pointer"><input type="radio" name="color" value="' + c.bg + '" class="sr-only"' + (i === 0 ? " checked" : "") +
+      '><span class="swatch block w-8 h-8 rounded-full" title="' + c.name + '" style="background:' + c.bg + '"></span></label>';
+  }).join("");
+
+  function todayIndex() { return (new Date().getDay() + 6) % 7; }
+
+  function render() {
+    var ti = todayIndex();
+    weekEl.innerHTML = DAYS.map(function (day, i) {
+      var list = tasks.filter(function (t) { return t.day === i; })
+        .sort(function (a, b) { return a.start.localeCompare(b.start) || a.end.localeCompare(b.end); });
+      var cards = list.map(function (t) {
+        return '<article class="card ' + (t.done ? "done" : "") + ' rounded-lg shadow-md p-3 flex gap-2.5 items-start text-zinc-900" draggable="true" data-id="' + t.id + '" style="background:' + t.color + '">' +
+          '<button class="chk mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center" data-toggle="' + t.id + '" aria-label="Tamamlandı olarak işaretle" aria-pressed="' + !!t.done + '">' +
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></button>' +
+          '<div class="min-w-0 flex-1"><p class="title font-medium text-sm leading-snug break-words">' + esc(t.name) + '</p>' +
+          '<p class="text-xs mt-1 text-zinc-700 tabular-nums">' + t.start + ' – ' + t.end + '</p></div>' +
+          '<div class="shrink-0 flex flex-col gap-1">' +
+          '<button class="text-zinc-600 rounded transition hover:text-indigo-800 hover:bg-black/10 p-0.5" data-edit="' + t.id + '" aria-label="Görevi düzenle">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg></button>' +
+          '<button class="text-zinc-600 rounded transition hover:text-rose-700 hover:bg-black/10 p-0.5" data-del="' + t.id + '" aria-label="Görevi sil">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></article>';
+      }).join("");
+      return '<div class="col ' + (i === ti ? "today" : "") + ' flex flex-col min-h-[65vh]" data-day="' + i + '">' +
+        '<h3 class="col-head px-3 py-3 text-sm font-semibold ' + (i === ti ? "text-indigo-300" : "text-zinc-300") + '">' + day + '</h3>' +
+        '<div class="p-2.5 flex flex-col gap-2 flex-1">' +
+        cards + '</div></div>';
+    }).join("");
+    var done = tasks.filter(function (t) { return t.done; }).length;
+    document.getElementById("summary").textContent = tasks.length ? done + " / " + tasks.length + " görev tamamlandı" : "";
+  }
+
+  weekEl.addEventListener("click", function (e) {
+    var tg = e.target.closest("[data-toggle]"), dl = e.target.closest("[data-del]"), ed = e.target.closest("[data-edit]");
+    if (tg) {
+      var t = tasks.find(function (x) { return x.id === tg.dataset.toggle; });
+      if (t) {
+        t.done = !t.done; save();
+        // Animate in place instead of re-rendering so transitions play
+        var card = tg.closest(".card");
+        card.classList.toggle("done", t.done);
+        tg.setAttribute("aria-pressed", t.done);
+        var d = tasks.filter(function (x) { return x.done; }).length;
+        document.getElementById("summary").textContent = d + " / " + tasks.length + " görev tamamlandı";
+      }
+    } else if (ed) {
+      var et = tasks.find(function (x) { return x.id === ed.dataset.edit; });
+      if (et) openModal(et);
+    } else if (dl) {
+      tasks = tasks.filter(function (x) { return x.id !== dl.dataset.del; });
+      save(); render();
+    }
+  });
+
+  var editId = null;
+  function openModal(t) {
+    editId = t ? t.id : null;
+    document.getElementById("err").classList.add("hidden");
+    document.getElementById("m-title").textContent = t ? "Görevi düzenle" : "Yeni görev";
+    document.getElementById("m-submit").textContent = t ? "Değişiklikleri kaydet" : "Görevi ekle";
+    document.getElementById("f-name").value = t ? t.name : "";
+    document.getElementById("f-start").value = t ? t.start : "09:00";
+    document.getElementById("f-end").value = t ? t.end : "10:00";
+    document.getElementById("f-day").value = t ? t.day : todayIndex();
+    var radios = form.querySelectorAll('input[name="color"]');
+    radios.forEach(function (r, i) { r.checked = t ? r.value === t.color : i === 0; });
+    modal.classList.remove("hidden-m");
+    setTimeout(function () { document.getElementById("f-name").focus(); }, 50);
+  }
+  function closeModal() { modal.classList.add("hidden-m"); editId = null; }
+
+  document.getElementById("fab").addEventListener("click", function () { openModal(); });
+  document.getElementById("cancel").addEventListener("click", closeModal);
+  modal.addEventListener("mousedown", function (e) { if (e.target === modal) closeModal(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModal(); });
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var start = document.getElementById("f-start").value, end = document.getElementById("f-end").value;
+    if (end <= start) { document.getElementById("err").classList.remove("hidden"); return; }
+    var data = {
+      name: document.getElementById("f-name").value.trim(),
+      start: start, end: end,
+      day: parseInt(document.getElementById("f-day").value, 10),
+      color: form.querySelector('input[name="color"]:checked').value
+    };
+    var existing = editId && tasks.find(function (x) { return x.id === editId; });
+    if (existing) Object.assign(existing, data);
+    else tasks.push(Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), done: false }, data));
+    save(); render(); closeModal();
+  });
+
+  // Drag and drop between days
+  var dragId = null;
+  function clearOver() { weekEl.querySelectorAll(".drag-over").forEach(function (c) { c.classList.remove("drag-over"); }); }
+  weekEl.addEventListener("dragstart", function (e) {
+    var c = e.target.closest && e.target.closest(".card");
+    if (!c) return;
+    dragId = c.dataset.id;
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", dragId); } catch (err) {}
+    setTimeout(function () { c.classList.add("dragging"); }, 0);
+  });
+  weekEl.addEventListener("dragend", function () {
+    dragId = null; clearOver();
+    weekEl.querySelectorAll(".dragging").forEach(function (c) { c.classList.remove("dragging"); });
+  });
+  weekEl.addEventListener("dragover", function (e) {
+    var col = e.target.closest(".col");
+    if (!col || !dragId) return;
+    e.preventDefault();
+    if (!col.classList.contains("drag-over")) { clearOver(); col.classList.add("drag-over"); }
+  });
+  weekEl.addEventListener("drop", function (e) {
+    var col = e.target.closest(".col");
+    if (!col || !dragId) return;
+    e.preventDefault();
+    var t = tasks.find(function (x) { return x.id === dragId; });
+    dragId = null;
+    if (t) { t.day = parseInt(col.dataset.day, 10); save(); }
+    render();
+  });
+
+  // Week reset
+  document.getElementById("reset-done").addEventListener("click", function () {
+    tasks.forEach(function (t) { t.done = false; });
+    save(); render();
+  });
+  var clearBtn = document.getElementById("clear-all"), clearTimer = null;
+  clearBtn.addEventListener("click", function () {
+    if (!tasks.length) return;
+    if (clearTimer) {
+      clearTimeout(clearTimer); clearTimer = null;
+      clearBtn.textContent = "Haftayı temizle";
+      clearBtn.classList.remove("border-rose-500", "text-rose-300");
+      tasks = []; save(); render();
+    } else {
+      clearBtn.textContent = "Tüm görevler silinsin mi? Tekrar tıkla";
+      clearBtn.classList.add("border-rose-500", "text-rose-300");
+      clearTimer = setTimeout(function () {
+        clearTimer = null;
+        clearBtn.textContent = "Haftayı temizle";
+        clearBtn.classList.remove("border-rose-500", "text-rose-300");
+      }, 3500);
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
